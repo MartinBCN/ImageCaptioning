@@ -1,9 +1,10 @@
-from typing import Tuple
+from typing import Tuple, List
 
 import torch
 import torch.nn as nn
 import torchvision.models as models
-from torch import Tensor
+from torch import Tensor, argmax
+
 device = torch.device('cuda:0' if torch.cuda.is_available() else "cpu")
 
 
@@ -169,7 +170,7 @@ class DecoderRNN(nn.Module):
 
         return x
 
-    def sample(self, inputs: Tensor, states=None, max_len=20):
+    def sample(self, inputs: Tensor, states=None, max_len=20) -> List[int]:
         """
         accepts pre-processed image tensor (inputs)
         and returns predicted sentence (list of tensor ids of length max_len)
@@ -188,9 +189,38 @@ class DecoderRNN(nn.Module):
 
         Returns
         -------
-
+        List[int]
         """
-        pass
+
+        # --- LSTM step ---
+        if states is None:
+            (hidden_state, cell_state) = self.init_hidden(1)
+        else:
+            (hidden_state, cell_state) = states
+
+        caption = []
+        for i in range(max_len):
+            x, (hidden_state, cell_state) = self.lstm(inputs, (hidden_state, cell_state))
+            # Shape of x: [1, len(caption), hidden size]
+
+            # --- Fully connected layer ---
+            x = self.fc(x)
+            # Shape of x: [1, len(vocabulary)]
+
+            # Determine integer (i.e. vocabulary entry) via argmax and remove unnecessary dimension
+            x = x.squeeze(1)
+            _, next_word = torch.max(x, dim=1)
+
+            # Cuda/Torch -> regular int
+            next_word = next_word.cpu().numpy()[0].item()
+
+            caption.append(next_word)
+
+            # We either stop after reaching the maximum amount of words or if the stop tag comes out
+            if next_word == 1:
+                break
+
+        return caption
 
     def init_weights(self):
         """
@@ -220,7 +250,6 @@ def main():
     images = Tensor(batch_size, 3, 244, 244).to(device)
     captions = torch.randint(0, 200, (batch_size, 15,)).to(device)
 
-
     """
     Testing the loader with a batch size of 5 gives:
     torch.Size([5, 3, 224, 224])
@@ -230,6 +259,7 @@ def main():
     torch.Size([5, 3, 224, 224])
     torch.Size([5, 14])
     """
+    print('--- Training ---')
     print('Shape images', images.shape)
     print('Shape captions', captions.shape)
 
@@ -253,6 +283,21 @@ def main():
 
     criterion = nn.CrossEntropyLoss().cuda() if torch.cuda.is_available() else nn.CrossEntropyLoss()
     criterion(outputs.view(-1, vocabulary_size), captions.view(-1))
+
+    print('--- Inference ---')
+    image = Tensor(1, 3, 244, 244).to(device)
+    # Obtain the embedded image features.
+    features = encoder(image).unsqueeze(1)
+    print(features.shape)
+
+    output = decoder.sample(features)
+    print('example output:', output)
+
+    assert (type(output) == list), "Output needs to be a Python list"
+    assert all([type(x) == int for x in output]), "Output should be a list of integers."
+    # Hack the last part, we don't want the loader here
+    assert all([x in range(vocabulary_size) for x in output]), \
+        "Each entry in the output needs to correspond to an integer that indicates a token in the vocabulary."
 
 
 if __name__ == '__main__':

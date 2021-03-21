@@ -59,7 +59,7 @@ criterion = nn.CrossEntropyLoss().cuda() if torch.cuda.is_available() else nn.Cr
 
 # Specify the learnable parameters of the model.
 # Dummy
-params = decoder.parameters()
+params = list(decoder.parameters()) + list(encoder.embed.parameters())
 
 # Define the optimizer.
 optimizer = Adam(params=params)
@@ -88,52 +88,50 @@ for epoch in range(1, num_epochs + 1):
 
         # Obtain the batch.
         images, captions = next(iter(data_loader))
-        print(images.shape)
-        print(captions.shape)
 
-        # # Move batch of images and captions to GPU if CUDA is available.
-        # images = images.to(device)
-        # captions = captions.to(device)
-        #
-        # # Zero the gradients.
-        # decoder.zero_grad()
-        # encoder.zero_grad()
-        #
-        # # Pass the inputs through the CNN-RNN model.
-        # features = encoder(images)
-        # outputs = decoder(features, captions)
-        #
-        # # Calculate the batch loss.
-        # loss = criterion(outputs.view(-1, vocab_size), captions.view(-1))
-        #
-        # # Backward pass.
-        # loss.backward()
-        #
-        # # Update the parameters in the optimizer.
-        # optimizer.step()
-        #
-        # # Get training statistics.
-        # stats = 'Epoch [%d/%d], Step [%d/%d], Loss: %.4f, Perplexity: %5.4f' % (
-        # epoch, num_epochs, i_step, total_step, loss.item(), np.exp(loss.item()))
-        #
-        # # Print training statistics (on same line).
-        # print('\r' + stats, end="")
-        # sys.stdout.flush()
-        #
-        # # Print training statistics to file.
-        # f.write(stats + '\n')
-        # f.flush()
-        #
-        # # Print training statistics (on different line).
-        # if i_step % print_every == 0:
-        #     print('\r' + stats)
+        # Move batch of images and captions to GPU if CUDA is available.
+        images = images.to(device)
+        captions = captions.to(device)
+
+        # Zero the gradients.
+        decoder.zero_grad()
+        encoder.zero_grad()
+
+        # Pass the inputs through the CNN-RNN model.
+        features = encoder(images)
+        outputs = decoder(features, captions)
+
+        # Calculate the batch loss.
+        loss = criterion(outputs.view(-1, vocab_size), captions.view(-1))
+
+        # Backward pass.
+        loss.backward()
+
+        # Update the parameters in the optimizer.
+        optimizer.step()
+
+        # Get training statistics.
+        stats = 'Epoch [%d/%d], Step [%d/%d], Loss: %.4f, Perplexity: %5.4f' % (
+        epoch, num_epochs, i_step, total_step, loss.item(), np.exp(loss.item()))
+
+        # Print training statistics (on same line).
+        print('\r' + stats, end="")
+        sys.stdout.flush()
+
+        # Print training statistics to file.
+        f.write(stats + '\n')
+        f.flush()
+
+        # Print training statistics (on different line).
+        if i_step % print_every == 0:
+            print('\r' + stats)
 
         break
 
     # Save the weights.
-    # if epoch % save_every == 0:
-    #     torch.save(decoder.state_dict(), os.path.join('./models', 'decoder-%d.pkl' % epoch))
-    #     torch.save(encoder.state_dict(), os.path.join('./models', 'encoder-%d.pkl' % epoch))
+    if epoch % save_every == 0:
+        torch.save(decoder.state_dict(), os.path.join('./models', f'decoder-{epoch}.pkl'))
+        torch.save(encoder.state_dict(), os.path.join('./models', f'encoder-{epoch}.pkl'))
 
 # Close the training log file.
 f.close()
