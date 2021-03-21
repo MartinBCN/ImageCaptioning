@@ -55,6 +55,7 @@ print(sample_caption)
 
 sample_caption = torch.Tensor(sample_caption).long()
 print(sample_caption)
+print(sample_caption.shape)
 
 # Preview the word2idx dictionary.
 dict(list(data_loader.dataset.vocab.word2idx.items())[:10])
